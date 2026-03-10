@@ -1,0 +1,37 @@
+[package]
+name = "tron-cli"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "tron_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tron-cli"
+path = "src/main.rs"
+
+[dependencies]
+tronic = { version = "0.5", features = ["tonic-tls"] }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive", "env"] }
+eyre = "0.6"
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+hex = "0.4"
+rpassword = "7"
+zeroize = "1"
+urlencoding = "2"
+dirs = "6"
+secrecy = "0.10.3"
+reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json"] }
+chrono = "0.4.44"
+bs58 = { version = "0.5.1", features = ["check"] }
+
+[dev-dependencies]
+dotenvy = "0.15"
