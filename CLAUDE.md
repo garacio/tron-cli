@@ -70,6 +70,8 @@ examples/
 - `Usdt::from_decimal()` returns `TokenError` which doesn't impl std Error — wrap with `anyhow!`
 - `GrpcProvider::builder().auth()` uses type-state — can't conditionally call, use match branches
 - gRPC endpoints use `http://` (not https), port 50051
+- `PendingTransaction::estimate_transaction()` returns `ResourceState` with fee estimate before broadcast
+- `ResourceState.insufficient` means lacking staked resources, not necessarily lacking TRX — check `account_balance` vs `suggested_trx_topup`
 
 ## Networks
 
@@ -90,7 +92,7 @@ examples/
 
 ```
 tron-cli balance [trx|usdt]           # omit token to show all non-zero
-tron-cli transfer [trx|usdt] --to ADDR --amount N [--yes]
+tron-cli transfer [trx|usdt] --to ADDR --amount N [--yes]  # shows fee estimate + USD price before confirm
 tron-cli history [trx|usdt] [--address ADDR] [-n LIMIT] [-w]
 tron-cli tx TXID
 tron-cli recv                          # show your address (alias for wallet show)
