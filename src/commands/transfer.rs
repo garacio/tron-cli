@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use anyhow::Result;
 use tronic::{
-    client::pending::AutoSigning,
+    client::pending::ManualSigning,
     contracts::{trc20::{Trc20Calls, Trc20Contract}, token::usdt::Usdt},
     domain::{estimate::ResourceState, trx::Trx},
     signer::LocalSigner,
@@ -12,7 +12,20 @@ use crate::{
     cli::Token,
     client,
     config::Network,
+    trongrid::TronGridClient,
 };
+
+/// Size of the PTX1 serialization header before activation checks.
+const PTX1_HEADER: usize = 4 + 32 + 21 + 8 + 1 + 1; // magic + txid + owner + base_trx + can_spend + count
+/// Size of each activation check entry.
+const PTX1_CHECK: usize = 21 + 8; // address + fee
+
+/// Extract protobuf Transaction bytes from PendingTransaction::serialize() output.
+fn extract_proto_bytes(serialized: &[u8]) -> &[u8] {
+    let count = serialized[PTX1_HEADER - 1] as usize;
+    let offset = PTX1_HEADER + count * PTX1_CHECK;
+    &serialized[offset..]
+}
 
 pub async fn run(
     network: Network,
@@ -25,7 +38,7 @@ pub async fn run(
 ) -> Result<()> {
     let recipient = crate::error::parse_address(to)?;
     let from = signer.address();
-    let client = client::build(network, signer, api_key).await?;
+    let client = client::build(network, signer.clone(), api_key).await?;
 
     match token {
         Token::Trx => {
@@ -34,12 +47,12 @@ pub async fn run(
                 .map_err(|_| anyhow::anyhow!("invalid amount: {amount}"))?
                 .into();
 
-            let pending = client
+            let mut pending = client
                 .send_trx()
                 .to(recipient)
                 .amount(trx_amount)
                 .can_spend_trx_for_fee(true)
-                .build::<AutoSigning>()
+                .build::<ManualSigning>()
                 .await?;
 
             let estimate = pending.estimate_transaction().await?;
@@ -50,7 +63,12 @@ pub async fn run(
                 confirm()?;
             }
 
-            let txid = pending.broadcast(&()).await?;
+            // Sign and broadcast via REST (TronGrid blocks gRPC BroadcastTransaction)
+            pending.sign(&signer, &()).await?;
+            let txid = pending.txid();
+            let proto_hex = hex::encode(extract_proto_bytes(&pending.serialize()));
+            let tg = TronGridClient::new(network, api_key)?;
+            tg.broadcast_hex(&proto_hex).await?;
             println!("TX sent: {txid:?}");
         }
         Token::Usdt => {
@@ -64,13 +82,13 @@ pub async fn run(
             let usdt_addr = crate::error::parse_address(network.usdt_contract())?;
             let contract = Trc20Contract::<Usdt>::new(usdt_addr);
 
-            let pending = client
+            let mut pending = client
                 .trc20_transfer()
                 .contract(contract)
                 .to(recipient)
                 .amount(usdt_amount)
                 .can_spend_trx_for_fee(true)
-                .build::<AutoSigning>()
+                .build::<ManualSigning>()
                 .await?;
 
             let estimate = pending.estimate_transaction().await?;
@@ -81,7 +99,12 @@ pub async fn run(
                 confirm()?;
             }
 
-            let txid = pending.broadcast(&()).await?;
+            // Sign and broadcast via REST (TronGrid blocks gRPC BroadcastTransaction)
+            pending.sign(&signer, &()).await?;
+            let txid = pending.txid();
+            let proto_hex = hex::encode(extract_proto_bytes(&pending.serialize()));
+            let tg = TronGridClient::new(network, api_key)?;
+            tg.broadcast_hex(&proto_hex).await?;
             println!("TX sent: {txid:?}");
         }
     }

@@ -95,6 +95,26 @@ impl TronGridClient {
         Ok(resp)
     }
 
+    /// Broadcast a signed transaction via REST (TronGrid blocks gRPC broadcast).
+    pub async fn broadcast_hex(&self, hex_transaction: &str) -> Result<BroadcastResponse> {
+        let url = format!("{}/wallet/broadcasthex", self.base_url);
+        let resp: BroadcastResponse = self
+            .http
+            .post(&url)
+            .json(&serde_json::json!({ "transaction": hex_transaction }))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        if !resp.result.unwrap_or(false) {
+            let msg = resp.message.as_deref().unwrap_or("unknown error");
+            let code = resp.code.as_deref().unwrap_or("UNKNOWN");
+            anyhow::bail!("broadcast failed: {msg} (code: {code})");
+        }
+        Ok(resp)
+    }
+
     /// Fetch raw transaction by txid.
     pub async fn transaction_by_id(&self, txid: &str) -> Result<RawTxResponse> {
         let url = format!(
@@ -238,4 +258,12 @@ pub struct RawTxResponse {
     pub raw_data: Option<RawData>,
     pub ret: Option<Vec<TxRet>>,
     pub raw_data_hex: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BroadcastResponse {
+    pub result: Option<bool>,
+    pub code: Option<String>,
+    pub message: Option<String>,
+    pub txid: Option<String>,
 }
